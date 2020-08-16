@@ -1,7 +1,8 @@
-# USAGE
-# python detect_mask_video.py
+# Code and comments for:
+# test_everything.py
+# by tassioborges
 
-# import the necessary packages
+# import all necessary packages
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 from tensorflow.keras.preprocessing.image import img_to_array
 from tensorflow.keras.models import load_model
@@ -25,6 +26,13 @@ from PIL import Image
 from matplotlib import cm
 from datetime import datetime
 
+#datetime is not used yet, but will be in the future to create to export video/data
+
+#This portion of the file was created by Adrian Rosebrock (pyimagesearch.com)
+#if you want to know more about his work, please visit his website, it has some really interesting stuff
+
+#-----------------------------------
+#by: pyimagesearch.com:
 
 def detect_and_predict_mask(frame, faceNet, maskNet):
     # grab the dimensions of the frame and then construct a blob
@@ -82,11 +90,16 @@ def detect_and_predict_mask(frame, faceNet, maskNet):
         # in the above `for` loop
         faces = np.array(faces, dtype="float32")
         preds = maskNet.predict(faces, batch_size=32)
+
+        #-------- 
+        #Note: this TFLITE portion was not made by pyimagesearch, so don't blame them if it doesnt work :D
+
+        #FOLLOWING LINES NEED TO BE UNCOMMENTED IF USING TFLITE MODEL:
         #input_data = np.array(image_a, dtype=np.float32)
         #interpreter.set_tensor(input_details[0]['index'], input_data)
         #interpreter.invoke()
         #preds = interpreter.get_tensor(output_details[0]['index'])
-
+        #-------- 
     # return a 2-tuple of the face locations and their corresponding
     # locations
     return (locs, preds)
@@ -112,23 +125,35 @@ faceNet = cv2.dnn.readNet(prototxtPath, weightsPath)
 
 # load the face mask detector model from disk
 print("[INFO] loading face mask detector model...")
+
+
+maskNet = load_model(args["model"])
+
+#-----------------------------------
+
+#We can use a tflite model if we want to, the difference is not that great, but if you prefer using tflite, uncomment the following lines
+
+
 #interpreter = tf.lite.Interpreter(model_path="converted_model.tflite")
 #interpreter.allocate_tensors()
 #input_details = interpreter.get_input_details()
 #output_details = interpreter.get_output_details()
 #input_shape = input_details[0]['shape']
-
-
-
-
-maskNet = load_model(args["model"])
 #maskNet = interpreter
-alpha = 0.25
+
+#If it doesnt work, don't blame pyimagesearch :D
+#-----------------------------------
+
 # initialize the video stream and allow the camera sensor to warm up
 print("[INFO] starting video stream...")
 vs = VideoStream(src=0).start()
 time.sleep(2.0)
 
+
+# Variable to define the transparency of the overlay: 0 - 1
+alpha = 0.25
+
+#this part of the code is based on the AMG8833, but quite some changes to allow 
 #sensor conf
 i2c_bus = busio.I2C(board.SCL, board.SDA)
 
@@ -137,17 +162,19 @@ max_temp = 34
 min_temp = 27
 points = [(math.floor(ix / 8), (ix % 8)) for ix in range(0, 64)]
 grid_x, grid_y = np.mgrid[0:7:32j, 0:7:32j]
+#the number 128 can be modified to suit your needs, take a look at matplotlib colormap to have a better understanding
 viridis = cm.get_cmap('viridis',128)
-
-
+#####
 
 # loop over the frames from the video stream
 while True:
     # grab the frame from the threaded video stream and resize it
-    # to have a maximum width of 400 pixels
+    # to have a maximum width of 427 pixels
     frame = vs.read()
+
     frame = imutils.resize(frame, width=427)
-    print(frame.shape)
+    #the frame, in my case, must have 427 width to have a 320 height, so I can easily overlay the thermal image
+
     pixels = []
     for row in sensor.pixels:
         pixels = pixels + row
@@ -157,25 +184,29 @@ while True:
     datagrid = np.rot90(datagrid,3)
     norm_grid_bicubic = (bicubic-min_temp)/(max_temp-min_temp)
     scaled_bicubic = norm_grid_bicubic*255
-    pil123 = Image.fromarray(viridis(scaled_bicubic.astype('uint8'),bytes=True))
-    pil123 = pil123.convert('RGB')
-    colorimg = cv2.cvtColor(np.array(pil123),cv2.COLOR_RGB2BGR)
-    scale_percent = 1000
+    pilimg = Image.fromarray(viridis(scaled_bicubic.astype('uint8'),bytes=True))
+    pilimg = pilimg.convert('RGB')
+    colorimg = cv2.cvtColor(np.array(pilimg),cv2.COLOR_RGB2BGR)
+
+    #I did scale to 1000% in order to get a 320x320, you can use your own scale here
+    scale_percent = 1000 
     widththermal = int(colorimg.shape[1] * scale_percent / 100)
     heightthermal = int(colorimg.shape[0] * scale_percent / 100)
     dim = (widththermal, heightthermal)
+    
+    #the thermal img is called foreground from now on:
     foreground = cv2.resize(colorimg, dim, interpolation = cv2.INTER_AREA)
-    dimbg = (427,320)
-
+    
     # detect faces in the frame and determine if they are wearing a
     # face mask or not
     (locs, preds) = detect_and_predict_mask(frame, faceNet, maskNet)
 
-    # loop over the detected face locations and their corresponding
-    # locations
+    #place the thermal image on top of the webcam img (location is static here, but I'll make it dynamic eventually)
     added_image = cv2.addWeighted(frame[0:320,53:373,:],alpha,foreground[0:320,0:320,:],1-alpha,0)
     frame[0:320,53:373,:]= added_image
     
+    # loop over the detected face locations and their corresponding
+    # locations
     for (box, pred) in zip(locs, preds):
         # unpack the bounding box and predictions
         (startX, startY, endX, endY) = box
@@ -196,15 +227,6 @@ while True:
         cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
 
     # show the output frame
-    #transparentbg = np.zeros(frame.shape[0],frame.shape[1])
-    #cv2.imshow("Frame", frame)
-    #added_image=cv2.addWeighted(frame,0.5,thermalimg,0.5,0)
-
-    #added_image = cv2.addWeighted(frame[160:480,160:480,:],alpha,thermalimg[0:320,0:320,:],1-alpha,0)
-    #frame[160:480,160:480,:]= added_image
-    
-    #added_image = cv2.addWeighted(frame[0:320,53:373,:],alpha,foreground[0:320,0:320,:],1-alpha,0)
-    #frame[0:320,53:373,:]= added_image
     cv2.imshow("over",frame)
     
     key = cv2.waitKey(1) & 0xFF
