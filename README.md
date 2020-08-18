@@ -11,5 +11,3 @@ This code was written to run on a Raspberry Pi, but if you plan to use the Face 
 * Thermal Image overlay
 
 * Mask usage identification
-
-https://raw.githubusercontent.com/borgestassio/Thermal-Video-Overlay-AMG8833/master/Results/Thermal_Mask.png
